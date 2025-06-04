@@ -12,7 +12,7 @@ public class CounterService {
     }
 
     public int increment() {
-        counter += 1;
+        counter += 11;
         return counter;
     }
 
