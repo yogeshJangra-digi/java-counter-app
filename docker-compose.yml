@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+      - backend-maven-cache:/root/.m2
+    environment:
+      - SPRING_PROFILES_ACTIVE=development
+      - SPRING_DEVTOOLS_RESTART_ENABLED=true
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080/api
+      - CHOKIDAR_USEPOLLING=true
+    networks:
+      - app-network
+    depends_on:
+      - backend
+
+  webhook:
+    build:
+      context: ./webhook-service
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    volumes:
+      - .:/workspace
+      - webhook-maven-cache:/root/.m2
+    environment:
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-your-webhook-secret}
+      - REPO_PATH=/workspace
+      - GIT_BRANCH=${GIT_BRANCH:-main}
+      - TOUCH_PATHS=backend/src/main/java/com/example/counter/CounterBackendApplication.java
+      - DEBUG=${DEBUG:-false}
+    networks:
+      - app-network
+    depends_on:
+      - backend
+
+volumes:
+  backend-maven-cache:
+  frontend-node-modules:
+  webhook-maven-cache:
+
+networks:
+  app-network:
+    driver: bridge

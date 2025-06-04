@@ -1,0 +1,27 @@
+/* Additional styles for the App component */
+.App {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.counter-container h1 {
+  color: #2c3e50;
+  margin-bottom: 10px;
+}
+
+.counter-container p {
+  color: #7f8c8d;
+  margin-bottom: 30px;
+  font-size: 1.1rem;
+}
+
+.counter-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.counter-button:disabled:hover {
+  background-color: inherit;
+}
