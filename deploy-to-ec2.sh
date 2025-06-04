@@ -63,8 +63,8 @@ ssh -i "$KEY_FILE" "$EC2_HOST" << EOF
     cd /home/ubuntu
     git clone $GITHUB_REPO java-counter-app
 
-    # Navigate to the java-counter-app subdirectory
-    cd java-counter-app/java-counter-app
+    # Navigate to the correct directory
+    cd java-counter-app
 
     # Configure git for webhook operations
     git config pull.rebase false
@@ -124,26 +124,50 @@ EC2_IP=$(ssh -i "$KEY_FILE" "$EC2_HOST" "curl -s http://169.254.169.254/latest/m
 # Deploy the application
 print_status "Deploying Java Counter App..."
 ssh -i "$KEY_FILE" "$EC2_HOST" << EOF
-    cd $REMOTE_DIR/java-counter-app
+    # Debug: Check current directory and files
+    echo "Current directory: \$(pwd)"
+    echo "Contents of /home/ubuntu:"
+    ls -la /home/ubuntu/
+
+    # Navigate to the correct directory
+    cd $REMOTE_DIR
+    echo "Changed to directory: \$(pwd)"
+    echo "Contents of current directory:"
+    ls -la
 
     # Stop existing containers if running
     if [ -f docker-compose.prod.yml ]; then
         echo "Stopping existing containers..."
         docker-compose -f docker-compose.prod.yml down || true
+    else
+        echo "docker-compose.prod.yml not found in current directory"
     fi
 
     # Update frontend .env with actual EC2 IP
     echo "Configuring frontend API URL..."
-    cat > frontend/.env << 'FRONTENDEOF'
+    if [ -d "frontend" ]; then
+        cat > frontend/.env << FRONTENDEOF
 PORT=3000
 REACT_APP_API_URL=http://$EC2_IP:8080/api
 FRONTENDEOF
+        echo "Frontend .env file created successfully"
+    else
+        echo "ERROR: frontend directory not found!"
+        ls -la
+        exit 1
+    fi
 
     # Update docker-compose.prod.yml with actual EC2 IP
-    sed -i 's/EC2_PUBLIC_IP/$EC2_IP/g' docker-compose.prod.yml
+    if [ -f "docker-compose.prod.yml" ]; then
+        sed -i 's/EC2_PUBLIC_IP/$EC2_IP/g' docker-compose.prod.yml
+        echo "docker-compose.prod.yml updated with EC2 IP: $EC2_IP"
+    else
+        echo "ERROR: docker-compose.prod.yml not found!"
+        exit 1
+    fi
 
     # Create .env file for production
-    cat > .env << 'ENVEOF'
+    cat > .env << ENVEOF
 WEBHOOK_SECRET=your-java-production-webhook-secret
 GIT_BRANCH=main
 DEBUG=false
@@ -152,7 +176,13 @@ ENVEOF
 
     # Build and start containers
     echo "Building and starting Java containers (backend + frontend + webhook)..."
-    docker-compose -f docker-compose.prod.yml up -d --build
+    if docker-compose -f docker-compose.prod.yml up -d --build; then
+        echo "Containers started successfully"
+    else
+        echo "ERROR: Failed to start containers"
+        docker-compose -f docker-compose.prod.yml logs
+        exit 1
+    fi
 
     # Wait for services to start
     echo "Waiting for services to start..."
@@ -165,6 +195,20 @@ ENVEOF
     # Show logs
     echo "Recent logs:"
     docker-compose -f docker-compose.prod.yml logs --tail=20
+
+    # Test if services are responding
+    echo "Testing service health..."
+    if curl -f http://localhost:8080/health 2>/dev/null; then
+        echo "Backend health check: PASSED"
+    else
+        echo "Backend health check: FAILED"
+    fi
+
+    if curl -f http://localhost:8081/health 2>/dev/null; then
+        echo "Webhook health check: PASSED"
+    else
+        echo "Webhook health check: FAILED"
+    fi
 EOF
 
 print_status "Deployment completed!"
@@ -185,3 +229,5 @@ print_warning "2. Configure your EC2 security group to allow inbound traffic on 
 print_warning "3. Update the WEBHOOK_SECRET in the .env file on the server"
 
 print_status "Java Counter App deployment script completed successfully!"
+
+
